@@ -13,16 +13,24 @@ The gp_source == 'images' gradient penalty requires backpropagating through the 
 
 Compared to the original Projected GAN repository, the following changes have been made:
 
-* train.py now takes new arguments pertaining to the WGAN-GP loss function. These new arguments are:
+* **train.py** now takes new arguments pertaining to the WGAN-GP loss function. These new arguments are:
   * 'd_loss': Decides whether the new WGAN-GP loss or the original Projected GAN loss is used to train the discriminator. Can be either 'WGAN_GP_Loss' or 'ProjectedGANLoss'
   * 'gp_source': Explained above. Can be either 'features' or 'images'.
   * 'gp_lambda': Weight given to the gradient penalty in the full dircriminator loss function. (Float>0)
   * 'gp_clamp': Size of the gradient's norm under which no penalty is applied (in a standard WGAN-GP objective, this value is 1 by default). (Float>=0)
-* training/training_loop.py now adds a forward hook on the feature network, giving convenient access to its inputs and outputs for gradient computations.
-* training/loss.py now includes the 'WGAN_GP_Loss' loss function.
-* I've replaced the environment.yml with a requirements.txt file to be installed with Python 3.8 or above. 
+* **training/training_loop.py** now adds a forward hook on the feature network, giving convenient access to its inputs and outputs for gradient computations.
+* **training/loss.py** now includes the 'WGAN_GP_Loss' loss function.
+* I've replaced the **environment.yml** with a **requirements.txt** file to be installed with Python 3.8 or above. 
 
 
 ### Experimental results
-Coming soon.
+Coming soon!
 
+
+
+
+### Acknowledgments
+
+* The [original Projected GAN repo](https://github.com/autonomousvision/projected_gan) and [paper](https://www.cvlibs.net/publications/Sauer2021NEURIPS.pdf) by Sauer et al.
+* The original Projected GAN repository expands on the [StyleGAN2-ADA](https://github.com/NVlabs/stylegan2-ada-pytorch) and [StyleGAN3](https://github.com/NVlabs/stylegan3) repos by Karras et al.
+* WGAN-GP loss functions were first introduced in this [repo](https://github.com/igul222/improved_wgan_training) and [paper](https://arxiv.org/pdf/1704.00028.pdf) by Gulrajani et al.
