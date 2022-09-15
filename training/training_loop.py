@@ -6,8 +6,9 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
-# modified by Axel Sauer for "Projected GANs Converge Faster"
+# Modified by Axel Sauer for "Projected GANs Converge Faster".
 #
+# Modified again by Étienne Bilocq for PG-GP.
 
 
 """Main training loop."""
@@ -21,7 +22,6 @@ import psutil
 import PIL.Image
 import numpy as np
 import torch
-import torch.nn.functional as F
 import dnnlib
 import pickle
 from torch_utils import misc
@@ -90,6 +90,12 @@ def save_image_grid(img, fname, drange, grid_size):
         PIL.Image.fromarray(img[:, :, 0], 'L').save(fname)
     if C == 3:
         PIL.Image.fromarray(img, 'RGB').save(fname)
+        
+#----------------------------------------------------------------------------
+# Forward hook used by PG-GP. 
+def hook(module, input, output):
+    module.input = input    # Used to interpolate between image after differentiable augmentation, for gradient penalty in image space
+    module.output = output  # Used to interpolate between features for gradient penalty in feature space   
 
 #----------------------------------------------------------------------------
 
@@ -159,6 +165,7 @@ def training_loop(
     common_kwargs = dict(c_dim=training_set.label_dim, img_resolution=training_set.resolution, img_channels=training_set.num_channels)
     G = dnnlib.util.construct_class_by_name(**G_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
     D = dnnlib.util.construct_class_by_name(**D_kwargs, **common_kwargs).train().requires_grad_(False).to(device) # subclass of torch.nn.Module
+    D.feature_network.register_forward_hook(hook)
     G_ema = copy.deepcopy(G).eval()
 
     # Check for existing checkpoint
@@ -422,8 +429,8 @@ def training_loop(
                 stats_metrics.update(result_dict.results)
 
             # save best fid ckpt
-            snapshot_pkl = os.path.join(run_dir, f'best_model.pkl')
-            cur_nimg_txt = os.path.join(run_dir, f'best_nimg.txt')
+            snapshot_pkl = os.path.join(run_dir, 'best_model.pkl')
+            cur_nimg_txt = os.path.join(run_dir, 'best_nimg.txt')
             if rank == 0:
                 if 'fid50k_full' in stats_metrics and stats_metrics['fid50k_full'] < best_fid:
                     best_fid = stats_metrics['fid50k_full']

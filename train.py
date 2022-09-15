@@ -6,8 +6,10 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 #
-# modified by Axel Sauer for "Projected GANs Converge Faster"
+# Modified by Axel Sauer for "Projected GANs Converge Faster".
 #
+# Modified again by Étienne Bilocq for PG-GP.
+
 import os
 import click
 import re
@@ -74,6 +76,13 @@ def launch_training(c, desc, outdir, dry_run):
     print(f'Output directory:    {c.run_dir}')
     print(f'Number of GPUs:      {c.num_gpus}')
     print(f'Batch size:          {c.batch_size} images')
+    print(f'Generator lr:        {c.G_opt_kwargs.lr}')
+    print(f'Discriminator lr:    {c.D_opt_kwargs.lr}')
+    print(f'Loss function:       {c.loss_kwargs.class_name}')
+    if c.loss_kwargs.class_name == 'WGAN_GP_Loss':
+        print(f'Grad penalty source: {c.loss_kwargs.gp_source}')
+        print(f'Grad penalty lambda: {c.loss_kwargs.gp_lambda}')
+        print(f'Grad penalty clamp:  {c.loss_kwargs.gp_clamp}')
     print(f'Training duration:   {c.total_kimg} kimg')
     print(f'Dataset path:        {c.training_set_kwargs.path}')
     print(f'Dataset size:        {c.training_set_kwargs.max_size} images')
@@ -137,12 +146,21 @@ def parse_comma_separated_list(s):
 @click.option('--mirror',       help='Enable dataset x-flips', metavar='BOOL',                  type=bool, default=False, show_default=True)
 @click.option('--resume',       help='Resume from given network pickle', metavar='[PATH|URL]',  type=str)
 
+### Options for PG-GP. 
+# gp_source: Inputs w.r.t. which gradients to be penalized are computed.
+# gp_lambda: Weight of gradient penalty in WGAN loss function.
+# gp_clamp:  Maximum size of gradient that incurs no penalty in WGAN loss fuction.
+@click.option('--d_loss',       help='D loss function',                                         type=click.Choice(['WGAN_GP_Loss','ProjectedGANLoss']), default='WGAN_GP_Loss')
+@click.option('--gp_source',    help='WGAN-GP gradient penalty inputs',                         type=click.Choice(['features', 'images']), default='features')
+@click.option('--gp_lambda',    help='WGAN-GP gradient penalty weight', metavar='FLOAT',        type=click.FloatRange(min=0), default=10, show_default=True)
+@click.option('--gp_clamp',     help='WGAN-GP clamp value', metavar='FLOAT',                    type=click.FloatRange(min=0), default=0.5, show_default=True)
+
 # Misc hyperparameters.
 @click.option('--batch-gpu',    help='Limit batch size per GPU', metavar='INT',                 type=click.IntRange(min=1))
 @click.option('--cbase',        help='Capacity multiplier', metavar='INT',                      type=click.IntRange(min=1), default=32768, show_default=True)
 @click.option('--cmax',         help='Max. feature maps', metavar='INT',                        type=click.IntRange(min=1), default=512, show_default=True)
-@click.option('--glr',          help='G learning rate  [default: varies]', metavar='FLOAT',     type=click.FloatRange(min=0))
-@click.option('--dlr',          help='D learning rate', metavar='FLOAT',                        type=click.FloatRange(min=0), default=0.002, show_default=True)
+@click.option('--glr',          help='G learning rate  [default: varies]', metavar='FLOAT',     type=click.FloatRange(min=0), default=0.0002, show_default=True)
+@click.option('--dlr',          help='D learning rate', metavar='FLOAT',                        type=click.FloatRange(min=0), default=0.0002, show_default=True)
 @click.option('--map-depth',    help='Mapping network depth  [default: varies]', metavar='INT', type=click.IntRange(min=1))
 
 # Misc settings.
@@ -182,7 +200,7 @@ def main(**kwargs):
     c.G_kwargs.channel_base = opts.cbase
     c.G_kwargs.channel_max = opts.cmax
     c.G_kwargs.mapping_kwargs.num_layers = 2
-    c.G_opt_kwargs.lr = (0.002 if opts.cfg == 'stylegan2' else 0.0025) if opts.glr is None else opts.glr
+    c.G_opt_kwargs.lr = opts.glr
     c.D_opt_kwargs.lr = opts.dlr
     c.metrics = opts.metrics
     c.total_kimg = opts.kimg
@@ -209,7 +227,6 @@ def main(**kwargs):
     elif opts.cfg in ['fastgan', 'fastgan_lite']:
         c.G_kwargs = dnnlib.EasyDict(class_name='pg_modules.networks_fastgan.Generator', cond=opts.cond, synthesis_kwargs=dnnlib.EasyDict())
         c.G_kwargs.synthesis_kwargs.lite = (opts.cfg == 'fastgan_lite')
-        c.G_opt_kwargs.lr = c.D_opt_kwargs.lr = 0.0002
         use_separable_discs = False
 
     # Resume.
@@ -233,7 +250,10 @@ def main(**kwargs):
         desc += f'-{opts.desc}'
 
     # Projected and Multi-Scale Discriminators
-    c.loss_kwargs = dnnlib.EasyDict(class_name='training.loss.ProjectedGANLoss')
+    c.loss_kwargs = dnnlib.EasyDict(class_name=f'training.loss.{opts.d_loss}',
+                                    gp_source=opts.gp_source,
+                                    gp_lambda=opts.gp_lambda,
+                                    gp_clamp=opts.gp_clamp)
     c.D_kwargs = dnnlib.EasyDict(
         class_name='pg_modules.discriminator.ProjectedDiscriminator',
         diffaug=True,
